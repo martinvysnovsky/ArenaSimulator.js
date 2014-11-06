@@ -25,7 +25,7 @@ function ArenaSimulator(canvas)
 	this.objects = [];
 
 	// virtual time speed
-	var timeSpeed = 1;
+	this.timeSpeed = 1;
 }
 
 ArenaSimulator.prototype = {
@@ -58,22 +58,46 @@ ArenaSimulator.prototype = {
 	/**
 	 * Method to check if coords is valid
 	 *
-	 * @param   {int}  x  X coord
-	 * @param   {int}  y  Y coord
+	 * @param   {float}  x  X coord
+	 * @param   {float}  y  Y coord
 	 *
 	 * @return  {boolean}
 	 */
 	validCoords: function(x, y)
 	{
-		return x >= 0 && y >= 0 && x <= this.width && y <= this.height;
+		return this.validX(x) && this.validY(y);
+	},
+
+	/**
+	 * Method to check if X coord is valid
+	 *
+	 * @param   {float}  x  X coord
+	 *
+	 * @return  {boolean}
+	 */
+	validX: function(x)
+	{
+		return x >= 0 && x <= this.width;
+	},
+
+	/**
+	 * Method to check if Y coord is valid
+	 *
+	 * @param   {float}  x  Y coord
+	 *
+	 * @return  {boolean}
+	 */
+	validY: function(y)
+	{
+		return y >= 0 && y <= this.height;
 	},
 
 	/**
 	 * Method to repair X coord
 	 *
-	 * @param   {int}  x  Coord
+	 * @param   {float}  x  Coord
 	 *
-	 * @return  {int}     Repaired coord
+	 * @return  {float}     Repaired coord
 	 */
 	repairX: function(x)
 	{
@@ -88,9 +112,9 @@ ArenaSimulator.prototype = {
 	/**
 	 * Method to repair Y coord
 	 *
-	 * @param   {int}  y  Coord
+	 * @param   {float}  y  Coord
 	 *
-	 * @return  {int}     Repaired coord
+	 * @return  {float}     Repaired coord
 	 */
 	repairY: function(y)
 	{
@@ -100,6 +124,50 @@ ArenaSimulator.prototype = {
 			return this.height;
 		else
 			return y;
+	},
+
+	/**
+	 * Method to reapair all objects that are collide with given object
+	 *
+	 * @param   {object}  object  Object to check
+	 *
+	 * @return  {array}           Return array of colliding objects
+	 */
+	repairCollidingObjects: function(objectToCheck)
+	{
+		var collide = [];
+
+		for(var i=0; i<this.objectsLength; i++)
+		{
+			var object = this.objects[i];
+
+			if(object == objectToCheck)
+				continue;
+
+			var xs = object.x - objectToCheck.x;
+			var ys = object.y - objectToCheck.y;
+
+			var distance    = Math.round(Math.sqrt((xs * xs) + (ys * ys)));
+			var minDistance = object.radius + objectToCheck.radius;
+
+			if(distance < minDistance)
+			{
+				var distanceRatio = minDistance / distance;
+				
+				// repair coords
+				var newX = object.x - (xs * distanceRatio) - 1; // add a little space betweet objects
+				var newY = object.y - (ys * distanceRatio) - 1; // add a little space betweet objects
+
+				// TODO: repair coords near walls
+
+				objectToCheck.x = newX;
+				objectToCheck.y = newY;
+
+				collide.push(object);
+			}
+		}
+
+		return collide;
 	},
 
 	/**
@@ -143,6 +211,12 @@ function ArenaObject()
 	this.y = 0;
 
 	this.radius = 20;
+
+	// object edges - relative from object center
+	this.leftEdge   = -this.radius;
+	this.rightEdge  = this.radius;
+	this.topEdge    = -this.radius;
+	this.bottomEdge = this.radius;
 
 	this.rotation = 0; // in radians
 }
@@ -204,14 +278,41 @@ ArenaObject.prototype = {
 	 */
 	setCoords: function(x, y)
 	{
-		if(!this.arena.validCoords(x, y))
+		var arena = this.arena;
+
+		// check if coords is inside arena and avoid to crash to wall
+		var leftEdgeX = x + this.leftEdge;
+
+		if(!arena.validX(leftEdgeX)) // left edge
+			x = arena.repairX(leftEdgeX) - this.leftEdge;
+		else // right edge
 		{
-			x = this.arena.repairX(x);
-			y = this.arena.repairY(y);
+			var rightEdgeX = x + this.rightEdge;
+
+			if(!arena.validX(rightEdgeX)) // left edge
+				x = arena.repairX(rightEdgeX) - this.rightEdge;
 		}
 
-		this.x = x;
-		this.y = y;
+		var topEdgeY = y + this.topEdge;
+
+		if(!arena.validY(topEdgeY)) // top edge
+			y = arena.repairY(topEdgeY) - this.topEdge;
+		else // bottom edge
+		{
+			var bottomEdgeY = y + this.bottomEdge;
+
+			if(!arena.validY(bottomEdgeY)) // left edge
+				y = arena.repairY(bottomEdgeY) - this.bottomEdge;
+		}
+
+		// check for collision with another objects and repair its
+		var collide = arena.repairCollidingObjects(this);
+
+		if(collide.length === 0)
+		{
+			this.x = x;
+			this.y = y;
+		}
 	}
 };
 
