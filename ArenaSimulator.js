@@ -227,13 +227,15 @@ ArenaObject.prototype = {
 	/**
 	 * Method to draw object to canvas
 	 *
-	 * @param   {object}  ctx  Canvas context
-	 * @param   {int}     x    X coord
-	 * @param   {int}     y    Y coord
+	 * @param   {object}    ctx         Canvas context
+	 * @param   {int}       x           X coord
+	 * @param   {int}       y           Y coord
+	 * @param   {function}  beforeDraw  Method to run before draw object
+	 * @param   {function}  afterDraw   Method to run after draw object
 	 *
 	 * @return  {void}
 	 */
-	draw: function(ctx, x, y)
+	draw: function(ctx, x, y, beforeDraw, afterDraw)
 	{
 		// recompute new object position
 		this.recomputePosition();
@@ -243,6 +245,9 @@ ArenaObject.prototype = {
 		// set zero coords for rotation of canvas
 		ctx.translate(x, y);
 		ctx.rotate(this.rotation);
+
+		if(typeof beforeDraw == 'function')
+			beforeDraw(ctx);
 
 		ctx.fillStyle = '#666';
 
@@ -256,6 +261,9 @@ ArenaObject.prototype = {
 		ctx.moveTo(0, 0);
 		ctx.lineTo(this.radius, 0);
 		ctx.stroke();
+
+		if(typeof afterDraw == 'function')
+			afterDraw(ctx);
 
 		ctx.restore();
 	},
@@ -323,6 +331,9 @@ function ArenaRobot()
 {
 	// inherit from arena object
 	ArenaObject.call(this);
+
+	// initialize sensors
+	this.sensors = [];
 }
 
 ArenaRobot.prototype = Object.create(ArenaObject.prototype);
@@ -339,6 +350,51 @@ ArenaRobot.prototype.rotate = function(angle)
 	this.rotation += angle;
 };
 
+ArenaRobot.prototype.addSensor = function(sensor)
+{
+	if(!(sensor instanceof Sensor))
+		throw new Error('You must pass valid sensor.');
+
+	this.sensors.push(sensor);
+};
+
+/**
+ * Method to draw object to canvas
+ *
+ * @param   {object}  ctx  Canvas context
+ * @param   {int}     x    X coord
+ * @param   {int}     y    Y coord
+ *
+ * @return  {void}
+ */
+ArenaRobot.prototype.draw = function(ctx, x, y)
+{
+	var self = this;
+
+	ArenaObject.prototype.draw.call(this, ctx, x, y, function(ctx)
+	{
+		// draw all sensors in robot
+		self.drawSensors(ctx);
+	});
+};
+
+/**
+ * Method to draw robot sensors
+ *
+ * @param   {object}  ctx  Context of canvas
+ * 
+ * @return  {void}
+ */
+ArenaRobot.prototype.drawSensors = function(ctx)
+{
+	for(var i=0, len=this.sensors.length; i<len; i++)
+	{
+		var sensor = this.sensors[i];
+
+		sensor.draw(ctx, this.radius, 0);
+	}
+};
+
 /**
  * Khepera robot
  */
@@ -349,15 +405,25 @@ function KheperaRobot()
 
 	this.leftWheelSpeed  = 0; // speed in px/s
 	this.rightWheelSpeed = 0; // speed in px/s
+
+	// add sensors
+	this.addSensor(new IrSensor({positionAngle: -50, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle: -30, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle: -10, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle:  10, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle:  30, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle:  50, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle:  150, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle:  210, viewAngle: 25}));
 }
 
 KheperaRobot.prototype = Object.create(ArenaRobot.prototype);
 
 /**
-	 * Method to change position of object in time
-	 *
-	 * @return  {void}
-	 */
+ * Method to change position of object in time
+ *
+ * @return  {void}
+ */
 KheperaRobot.prototype.recomputePosition = function()
 {
 	var x = this.x;
@@ -377,4 +443,97 @@ KheperaRobot.prototype.recomputePosition = function()
 	y = (sM * Math.sin(this.rotation)) + y;
 
 	this.setCoords(x, y);
+};
+
+/**
+ * Sensors for robot
+ */
+function Sensor()
+{
+
+}
+
+Sensor.prototype = (function()
+{
+	// sensor data
+	var data = [];
+
+	return {
+		constructor: Sensor,
+
+		/**
+		 * Method to get data form sensor
+		 *
+		 * @return  {array}
+		 */
+		getData: function()
+		{
+			return data;
+		},
+
+		/**
+		 * Method to draw sensor to robot
+		 *
+		 * @param   {object}  ctx  Context for canvas
+		 *
+		 * @return  {void}
+		 */
+		draw: function(ctx)
+		{
+			// nothing to draw
+		}
+	};
+}());
+
+/**
+ * Infrared sensor
+ */
+function IrSensor(options)
+{
+	Sensor.call(this);
+
+	options = options || {};
+
+	// sensor parameters
+	this.viewAngle      = options.viewAngle      || 15;   // in degrees
+	this.detectionRange = options.detectionRange || 100; // in pixels
+
+	this.color = options.color || '#ddf';
+
+	// sensor position on robot
+	this.positionAngle  = options.positionAngle  || 0; // sensor is on the edge of robot on this angle
+}
+
+IrSensor.prototype = Object.create(Sensor.prototype);
+
+/**
+ * Method to draw sensor to robot
+ *
+ * @param   {object}  ctx  Context for canvas
+ * @param   {int}     x    X coord
+ * @param   {int}     y    Y coord
+ *
+ * @return  {void}
+ */
+IrSensor.prototype.draw = function(ctx, x, y)
+{
+	ctx.save();
+
+	ctx.fillStyle   = 'rgba(0, 0, 0, 0.05)';
+	ctx.strokeStyle = this.color;
+
+	// view angle half
+	var viewAngleHalf = (this.viewAngle / 2) * Math.PI / 180; // in radians
+
+	ctx.rotate(this.positionAngle * Math.PI / 180);
+
+	// circle
+	ctx.beginPath();
+	ctx.moveTo(x, y);
+	ctx.arc(x, y, this.detectionRange, viewAngleHalf, -viewAngleHalf, true);
+	ctx.lineTo(x, y);
+	ctx.fill();
+	ctx.stroke();
+
+	ctx.restore();
 };
