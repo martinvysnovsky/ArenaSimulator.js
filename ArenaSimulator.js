@@ -347,13 +347,37 @@ ArenaRobot.prototype = Object.create(ArenaObject.prototype);
  */
 ArenaRobot.prototype.rotate = function(angle)
 {
-	this.rotation += angle;
+	var PiTwo = 2 * Math.PI;
+
+	var newAngle = this.rotation + angle;
+
+	if(newAngle < 0)
+		newAngle += PiTwo;
+
+	if(newAngle > PiTwo)
+		newAngle -= PiTwo;
+
+	this.rotation =  newAngle; // in radians
 };
 
-ArenaRobot.prototype.addSensor = function(sensor)
+/**
+ * Method to add sensor to robot on some location
+ *
+ * @param  {object}  sensor  Sensor to add
+ * @param  {float}  x        X coord on robot
+ * @param  {float}  y        Y coord on robot
+ */
+ArenaRobot.prototype.addSensor = function(sensor, x, y)
 {
 	if(!(sensor instanceof Sensor))
 		throw new Error('You must pass valid sensor.');
+
+	// back refrence to robot
+	sensor.robot = this;
+
+	// set coords
+	sensor.onRobotX = x || 0;
+	sensor.onRobotY = y || 0;
 
 	this.sensors.push(sensor);
 };
@@ -391,7 +415,7 @@ ArenaRobot.prototype.drawSensors = function(ctx)
 	{
 		var sensor = this.sensors[i];
 
-		sensor.draw(ctx, this.radius, 0);
+		sensor.draw(ctx);
 	}
 };
 
@@ -407,14 +431,14 @@ function KheperaRobot()
 	this.rightWheelSpeed = 0; // speed in px/s
 
 	// add sensors
-	this.addSensor(new IrSensor({positionAngle: -50, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle: -30, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle: -10, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle:  10, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle:  30, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle:  50, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle:  150, viewAngle: 25}));
-	this.addSensor(new IrSensor({positionAngle:  210, viewAngle: 25}));
+	this.addSensor(new IrSensor({positionAngle: -50, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle: -30, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle: -10, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle:  10, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle:  30, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle:  50, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle:  150, viewAngle: 25}), this.radius);
+	this.addSensor(new IrSensor({positionAngle:  210, viewAngle: 25}), this.radius);
 }
 
 KheperaRobot.prototype = Object.create(ArenaRobot.prototype);
@@ -450,26 +474,16 @@ KheperaRobot.prototype.recomputePosition = function()
  */
 function Sensor()
 {
+	this.onRobotX = 0; // X coord on robot from center
+	this.onRobotY = 0; // Y coord on robot from center
 
+	this.detects = []; // array of objects to detect
 }
 
 Sensor.prototype = (function()
 {
-	// sensor data
-	var data = [];
-
 	return {
 		constructor: Sensor,
-
-		/**
-		 * Method to get data form sensor
-		 *
-		 * @return  {array}
-		 */
-		getData: function()
-		{
-			return data;
-		},
 
 		/**
 		 * Method to draw sensor to robot
@@ -501,37 +515,124 @@ function IrSensor(options)
 	this.color = options.color || '#ddf';
 
 	// sensor position on robot
-	this.positionAngle  = options.positionAngle  || 0; // sensor is on the edge of robot on this angle
+	this.positionAngle  = (options.positionAngle && (options.positionAngle * Math.PI / 180))  || 0; // sensor is on the edge of robot on this angle; in radians
+
+	this.detects = options.detects || ['wall'];  // array of objects to detect
 }
 
 IrSensor.prototype = Object.create(Sensor.prototype);
 
 /**
+ * Method to get data from sensor
+ *
+ * @return  {mixed}
+ */
+IrSensor.prototype.getData = function()
+{
+	// detect some wall
+	if(this.detects.indexOf('wall') !== -1 && this.detectWalls())
+		return 1;
+};
+
+/**
+ * MEthod to detect walls
+ *
+ * @return  {boolean}
+ */
+IrSensor.prototype.detectWalls = function()
+{
+	var robot = this.robot;
+
+	// coords of robot
+	var x = robot.x;
+	var y = robot.y;
+
+	var PiHalf        = Math.PI / 2;
+	var PiTwo         = Math.PI * 2;
+	var viewAngleHalf = (this.viewAngle / 2) * Math.PI / 180; // in radians
+
+	// absolute angle of sensor
+	var sensorAbsoluteAngle = robot.rotation + this.positionAngle;
+
+	if(sensorAbsoluteAngle < 0)
+		sensorAbsoluteAngle += PiTwo;
+
+	if(sensorAbsoluteAngle > PiTwo)
+		sensorAbsoluteAngle -= PiTwo;
+
+	// compute coords of sensor
+	x += (Math.cos(sensorAbsoluteAngle) * robot.radius);
+	y += (Math.sin(sensorAbsoluteAngle) * robot.radius);
+
+	// find refrence angle - angle from X axis
+	var sensorRefrenceAngle;
+	var quartal;
+	if(sensorAbsoluteAngle < PiHalf) // 1. quadrant
+	{
+		sensorRefrenceAngle = sensorAbsoluteAngle;
+		quartal = 1;
+	}
+	else if(sensorAbsoluteAngle < Math.PI) // 2. quadrant
+	{
+		sensorRefrenceAngle = Math.PI - sensorAbsoluteAngle;
+		quartal = 2;
+	}
+	else if(sensorAbsoluteAngle < (Math.PI + PiHalf)) // 3. quadrant
+	{
+		sensorRefrenceAngle = sensorAbsoluteAngle - Math.PI;
+		quartal = 3;
+	}
+	else // 4. quadrant
+	{
+		sensorRefrenceAngle = PiTwo - sensorAbsoluteAngle;
+		quartal = 4;
+	}
+
+	// top/bottom
+	var relativeDetectionRangeY = Math.cos(PiHalf - Math.min(PiHalf, (sensorRefrenceAngle + viewAngleHalf))) * this.detectionRange;
+	var wallDistanceTop         = y;
+	var wallDistanceBottom      = this.robot.arena.height - y;
+
+	if(((quartal == 1 || quartal == 2) && relativeDetectionRangeY > wallDistanceBottom) || ((quartal == 3 || quartal == 4) && relativeDetectionRangeY > wallDistanceTop))
+		return true;
+	
+	var relativeDetectionRangeX = Math.cos(Math.max(0, (sensorRefrenceAngle - viewAngleHalf))) * this.detectionRange;
+	var wallDistanceRight       = this.robot.arena.width - x;
+	var wallDistanceLeft        = x;
+
+	// left/right
+	if(((quartal == 1 || quartal == 4) && relativeDetectionRangeX > wallDistanceRight) || ((quartal == 2 || quartal == 3) && relativeDetectionRangeX > wallDistanceLeft))
+		return true;
+
+	return false;
+};
+
+/**
  * Method to draw sensor to robot
  *
  * @param   {object}  ctx  Context for canvas
- * @param   {int}     x    X coord
- * @param   {int}     y    Y coord
  *
  * @return  {void}
  */
-IrSensor.prototype.draw = function(ctx, x, y)
+IrSensor.prototype.draw = function(ctx)
 {
+	var sensorValue = this.getData();
+
 	ctx.save();
 
-	ctx.fillStyle   = 'rgba(0, 0, 0, 0.05)';
+	ctx.fillStyle   = (sensorValue == 1) ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.05)';
 	ctx.strokeStyle = this.color;
 
 	// view angle half
 	var viewAngleHalf = (this.viewAngle / 2) * Math.PI / 180; // in radians
 
-	ctx.rotate(this.positionAngle * Math.PI / 180);
+	ctx.rotate(this.positionAngle);
 
 	// circle
 	ctx.beginPath();
-	ctx.moveTo(x, y);
-	ctx.arc(x, y, this.detectionRange, viewAngleHalf, -viewAngleHalf, true);
-	ctx.lineTo(x, y);
+	ctx.moveTo(this.onRobotX, 0);
+	ctx.arc(this.onRobotX, 0, this.detectionRange, viewAngleHalf, -viewAngleHalf, true);
+	ctx.lineTo(this.onRobotX, 0);
 	ctx.fill();
 	ctx.stroke();
 
