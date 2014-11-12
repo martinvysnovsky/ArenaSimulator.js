@@ -204,13 +204,17 @@ ArenaSimulator.prototype = {
 
 /**
  * Object for arena
+ *
+ * @param  {object}  options  Options for arena object
  */
-function ArenaObject()
+function ArenaObject(options)
 {
+	options = options || {};
+
 	this.x = 0;
 	this.y = 0;
 
-	this.radius = 20;
+	this.radius = options.radius || 20;
 
 	// object edges - relative from object center
 	this.leftEdge   = -this.radius;
@@ -219,6 +223,8 @@ function ArenaObject()
 	this.bottomEdge = this.radius;
 
 	this.rotation = 0; // in radians
+
+	this.color = options.color || '#666';
 }
 
 ArenaObject.prototype = {
@@ -249,18 +255,12 @@ ArenaObject.prototype = {
 		if(typeof beforeDraw == 'function')
 			beforeDraw(ctx);
 
-		ctx.fillStyle = '#666';
+		ctx.fillStyle = this.color;
 
 		// circle
 		ctx.beginPath();
 		ctx.arc(0, 0, this.radius, 0, Math.PI*2, true);
 		ctx.fill();
-		
-		// front line
-		ctx.beginPath();
-		ctx.moveTo(0, 0);
-		ctx.lineTo(this.radius, 0);
-		ctx.stroke();
 
 		if(typeof afterDraw == 'function')
 			afterDraw(ctx);
@@ -323,6 +323,19 @@ ArenaObject.prototype = {
 		}
 	}
 };
+
+/**
+ * Obstacle for arena
+ *
+ * @param  {object}  options  Options foro obstacle object
+ */
+function Obstacle(options)
+{
+	// inherit from arena object
+	ArenaObject.call(this, options);
+}
+
+Obstacle.prototype = Object.create(ArenaObject.prototype);
 
 /**
  * Robot for arena
@@ -395,10 +408,23 @@ ArenaRobot.prototype.draw = function(ctx, x, y)
 {
 	var self = this;
 
-	ArenaObject.prototype.draw.call(this, ctx, x, y, function(ctx)
+	ArenaObject.prototype.draw.call(this, ctx, x, y,
+	function(ctx)
 	{
 		// draw all sensors in robot
 		self.drawSensors(ctx);
+	},
+	function(ctx)
+	{
+		ctx.save();
+
+		// front line
+		ctx.beginPath();
+		ctx.moveTo(0, 0);
+		ctx.lineTo(self.radius, 0);
+		ctx.stroke();
+
+		ctx.restore();
 	});
 };
 
@@ -501,6 +527,8 @@ Sensor.prototype = (function()
 
 /**
  * Infrared sensor
+ *
+ * @param  {object}  options  Options for sensor object
  */
 function IrSensor(options)
 {
@@ -517,7 +545,7 @@ function IrSensor(options)
 	// sensor position on robot
 	this.positionAngle  = (options.positionAngle && (options.positionAngle * Math.PI / 180))  || 0; // sensor is on the edge of robot on this angle; in radians
 
-	this.detects = options.detects || ['wall'];  // array of objects to detect
+	this.detects = options.detects || ['wall', 'object'];  // array of objects to detect
 }
 
 IrSensor.prototype = Object.create(Sensor.prototype);
@@ -532,6 +560,12 @@ IrSensor.prototype.getData = function()
 	// detect some wall
 	if(this.detects.indexOf('wall') !== -1 && this.detectWalls())
 		return 1;
+
+	// detect objects
+	if(this.detects.indexOf('object') !== -1 && this.detectObjects())
+		return 1;
+
+	return 0;
 };
 
 /**
@@ -605,6 +639,16 @@ IrSensor.prototype.detectWalls = function()
 		return true;
 
 	return false;
+};
+
+/**
+ * MEthod to detect objects
+ *
+ * @return  {boolean}
+ */
+IrSensor.prototype.detectObjects = function()
+{
+
 };
 
 /**
