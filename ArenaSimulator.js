@@ -739,7 +739,12 @@ IrSensor.prototype.detectObjects = function()
 
 		if(sensorObjectAngle <= (viewAngleHalf + objectEdgeAngle))
 		{
-			var t = Math.cos(sensorObjectAngle - viewAngleHalf) * this.detectionRange;
+			var cos = Math.cos(sensorObjectAngle - viewAngleHalf);
+			
+			if((cos * sensorObjectDist) < this.detectionRange)
+				return true;
+
+			var t = cos * this.detectionRange;
 
 			if(Math.sqrt(Math.pow(sensorObjectDist - t, 2) + Math.pow(this.detectionRange, 2) - Math.pow(t, 2)) < object.radius)
 				return true;
