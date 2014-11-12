@@ -521,6 +521,52 @@ Sensor.prototype = (function()
 		draw: function(ctx)
 		{
 			// nothing to draw
+		},
+
+		/**
+		 * Method to get sensor absolute angle in arena
+		 *
+		 * @return  {float}
+		 */
+		getAbsoluteAngle: function()
+		{
+			var PiTwo = Math.PI * 2;
+
+			// absolute angle of sensor
+			var angle = this.robot.rotation + this.positionAngle;
+
+			if(angle < 0)
+				angle += PiTwo;
+
+			if(angle > PiTwo)
+				angle -= PiTwo;
+
+			return angle;
+		},
+
+		/**
+		 * Method to get sensor coords in map
+		 *
+		 * @return  {object}
+		 */
+		getCoords: function()
+		{
+			var robot = this.robot;
+
+			// coords of robot
+			var x = robot.x;
+			var y = robot.y;
+
+			var angle = this.getAbsoluteAngle();
+
+			// compute coords of sensor
+			x += (Math.cos(angle) * robot.radius);
+			y += (Math.sin(angle) * robot.radius);
+
+			return {
+				x: x,
+				y: y
+			};
 		}
 	};
 }());
@@ -575,28 +621,17 @@ IrSensor.prototype.getData = function()
  */
 IrSensor.prototype.detectWalls = function()
 {
-	var robot = this.robot;
-
-	// coords of robot
-	var x = robot.x;
-	var y = robot.y;
-
 	var PiHalf        = Math.PI / 2;
 	var PiTwo         = Math.PI * 2;
 	var viewAngleHalf = (this.viewAngle / 2) * Math.PI / 180; // in radians
 
 	// absolute angle of sensor
-	var sensorAbsoluteAngle = robot.rotation + this.positionAngle;
-
-	if(sensorAbsoluteAngle < 0)
-		sensorAbsoluteAngle += PiTwo;
-
-	if(sensorAbsoluteAngle > PiTwo)
-		sensorAbsoluteAngle -= PiTwo;
+	var sensorAbsoluteAngle = this.getAbsoluteAngle();
 
 	// compute coords of sensor
-	x += (Math.cos(sensorAbsoluteAngle) * robot.radius);
-	y += (Math.sin(sensorAbsoluteAngle) * robot.radius);
+	var coords = this.getCoords();
+	var x = coords.x;
+	var y = coords.y;
 
 	// find refrence angle - angle from X axis
 	var sensorRefrenceAngle;
@@ -642,13 +677,76 @@ IrSensor.prototype.detectWalls = function()
 };
 
 /**
- * MEthod to detect objects
+ * Method to detect objects
  *
  * @return  {boolean}
  */
 IrSensor.prototype.detectObjects = function()
 {
+	var robot = this.robot;
+	var arena = robot.arena;
 
+	// absolute angle of sensor
+	var sensorAbsoluteAngle = this.getAbsoluteAngle();
+
+	// compute coords of sensor
+	var coords = this.getCoords();
+	var x = coords.x;
+	var y = coords.y;
+
+	var objects = arena.objects;
+	
+	for(var i=0; i<arena.objectsLength; i++)
+	{
+		var object = objects[i];
+
+		// not self
+		if(object == robot)
+			continue;
+
+		var diffX = Math.abs(object.x - x);
+
+		if((diffX - object.radius) > this.detectionRange)
+			continue;
+
+		var diffY = Math.abs(object.y - y);
+
+		if((diffY - object.radius) > this.detectionRange)
+			continue;
+
+		var sensorObjectDist = Math.sqrt((diffX * diffX) + (diffY * diffY));
+
+		if((sensorObjectDist - object.radius) > this.detectionRange)
+			continue;
+
+		var coordsAngle;
+		if(object.x >= x && object.y >= y) // 1. quartal
+			coordsAngle = Math.atan(diffY / diffX);
+		else if(object.x < x && object.y >= y) // 2. quartal
+			coordsAngle = Math.PI - Math.atan(diffY / diffX);
+		else if(object.x < x && object.y < y) // 3. quartal
+			coordsAngle = Math.PI + Math.atan(diffY / diffX);
+		else // 4. quartal
+			coordsAngle = 2 * Math.PI - Math.atan(diffY / diffX);
+
+		var sensorObjectAngle = Math.abs(sensorAbsoluteAngle - coordsAngle);
+
+		if(sensorObjectAngle > Math.PI)
+			sensorObjectAngle = (2 * Math.PI) - sensorObjectAngle;
+
+		var objectEdgeAngle = Math.asin(object.radius / sensorObjectDist);
+		var viewAngleHalf   = (this.viewAngle / 2) * Math.PI / 180; // in radians
+
+		if(sensorObjectAngle <= (viewAngleHalf + objectEdgeAngle))
+		{
+			var t = Math.cos(sensorObjectAngle - viewAngleHalf) * this.detectionRange;
+
+			if(Math.sqrt(Math.pow(sensorObjectDist - t, 2) + Math.pow(this.detectionRange, 2) - Math.pow(t, 2)) < object.radius)
+				return true;
+		}
+	}
+
+	return false;
 };
 
 /**
