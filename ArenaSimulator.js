@@ -155,8 +155,8 @@ ArenaSimulator.prototype = {
 				var distanceRatio = minDistance / distance;
 				
 				// repair coords
-				var newX = object.x - (xs * distanceRatio) - 1; // add a little space betweet objects
-				var newY = object.y - (ys * distanceRatio) - 1; // add a little space betweet objects
+				var newX = object.x - (xs * distanceRatio * 1.01); // add a little space betweet objects
+				var newY = object.y - (ys * distanceRatio * 1.01); // add a little space betweet objects
 
 				// TODO: repair coords near walls
 
