@@ -321,6 +321,8 @@ ArenaObject.prototype = {
 			this.x = x;
 			this.y = y;
 		}
+		else if(typeof this.onColision == 'function')
+			this.onColision();
 	}
 };
 
@@ -340,13 +342,17 @@ Obstacle.prototype = Object.create(ArenaObject.prototype);
 /**
  * Robot for arena
  */
-function ArenaRobot()
+function ArenaRobot(options)
 {
+	options = options || {};
+
 	// inherit from arena object
-	ArenaObject.call(this);
+	ArenaObject.call(this, options);
 
 	// initialize sensors
 	this.sensors = [];
+
+	this.onColision = options.onColision || null; // function to run on colision
 }
 
 ArenaRobot.prototype = Object.create(ArenaObject.prototype);
@@ -393,6 +399,21 @@ ArenaRobot.prototype.addSensor = function(sensor, x, y)
 	sensor.onRobotY = y || 0;
 
 	this.sensors.push(sensor);
+};
+
+/**
+ * Method to get all sensors data
+ *
+ * @return  {array}
+ */
+ArenaRobot.prototype.getDataFromSensors = function()
+{
+	var data = [];
+
+	for(var i=0, len=this.sensors.length; i<len; i++)
+		data.push(this.sensors[i].getData());
+
+	return data;
 };
 
 /**
@@ -448,10 +469,12 @@ ArenaRobot.prototype.drawSensors = function(ctx)
 /**
  * Khepera robot
  */
-function KheperaRobot()
+function KheperaRobot(options)
 {
+	options = options || {};
+
 	// inherit from arena object
-	ArenaRobot.call(this);
+	ArenaRobot.call(this, options);
 
 	this.leftWheelSpeed  = 0; // speed in px/s
 	this.rightWheelSpeed = 0; // speed in px/s
@@ -584,7 +607,7 @@ function IrSensor(options)
 
 	// sensor parameters
 	this.viewAngle      = options.viewAngle      || 15;   // in degrees
-	this.detectionRange = options.detectionRange || 100; // in pixels
+	this.detectionRange = options.detectionRange || 50; // in pixels
 
 	this.color = options.color || '#ddf';
 
